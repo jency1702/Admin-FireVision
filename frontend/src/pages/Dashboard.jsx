@@ -1,53 +1,66 @@
+
+
 import React, { useState, useEffect } from 'react';
-import { Flame, AlertTriangle, TrendingUp, Clock, Activity } from 'lucide-react';
-import { getStatistics, getFireEvents, getAlerts } from '../services/api';
+import { Database, Cpu, Video, RefreshCw, Activity } from 'lucide-react';
+import { getFireEvents, getMLPredictions } from '../services/api';
 import StatCard from '../components/StatCard';
-import FireEventCard from '../components/FireEventCard';
-import ChartCard from '../components/ChartCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const Dashboard = () => {
-  const [stats, setStats] = useState(null);
-  const [recentEvents, setRecentEvents] = useState([]);
-  const [recentAlerts, setRecentAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [chartData, setChartData] = useState([]);
+  const [counts, setCounts] = useState({ total: 0, cnnFire: 0, cctvFire: 0, mlCount: 0 });
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
+    const interval = setInterval(loadData, 5000);
+
+    const handlePredictionUpdate = () => loadData();
+    window.addEventListener('predictionUpdate', handlePredictionUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('predictionUpdate', handlePredictionUpdate);
+    };
   }, []);
 
   const loadData = async () => {
     try {
-      const [statsData, eventsData, alertsData] = await Promise.all([
-        getStatistics(),
+      const [eventsResponse, mlResponse] = await Promise.all([
         getFireEvents(),
-        getAlerts()
+        getMLPredictions()
       ]);
-      
-      setStats(statsData.data);
-      setRecentEvents(eventsData.data.slice(0, 6));
-      setRecentAlerts(alertsData.data.slice(0, 5));
-      
-      // Prepare chart data
-      const sourceData = Object.entries(statsData.data.firesBySource || {}).map(([name, value]) => ({
-        name,
-        value
-      }));
-      setChartData(sourceData);
+
+      const allEvents = eventsResponse.data || [];
+      const allML = mlResponse.data || [];
+
+      // 1. CNN Fires (Excluding "No Fire")
+      const cnnCount = allEvents.filter(e => 
+        (e.label === 'Fire') && (e.source === 'CNN Image Upload' || !e.source.toLowerCase().includes('cctv'))
+      ).length;
+
+      // 2. CCTV Fires (Excluding "No Fire")
+      const cctvCount = allEvents.filter(e => 
+        (e.label === 'Fire') && (e.source && e.source.toLowerCase().includes('cctv'))
+      ).length;
+
+      // 3. ML Prediction Count
+      const mlCount = allML.length;
+
+      setCounts({
+        total: cnnCount + cctvCount + mlCount,
+        cnnFire: cnnCount,
+        cctvFire: cctvCount,
+        mlCount: mlCount
+      });
       
       setLoading(false);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading dashboard data:', error);
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return <LoadingSpinner message="Loading dashboard..." />;
-  }
+  if (loading) return <LoadingSpinner message="Syncing Statistics..." />;
 
   return (
     <div className="space-y-6">
@@ -55,111 +68,68 @@ const Dashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">Real-time fire detection monitoring</p>
+          <p className="text-gray-600 mt-1">Real-time Fire Monitoring Summary</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Activity className="w-4 h-4 animate-pulse text-green-500" />
-          <span>Live</span>
-        </div>
+        <button 
+          onClick={() => { setLoading(true); loadData(); }} 
+          className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-semibold transition shadow-md"
+        >
+          <RefreshCw className="w-5 h-5" /> Refresh
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Main Stats Row - Now including Total Prediction as a Card */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Fires Detected"
-          value={stats?.totalFires || 0}
-          icon={Flame}
+          title="Total Predictions"
+          value={counts.total}
+          icon={Activity}
           color="orange"
         />
         <StatCard
-          title="SMS Alerts Sent"
-          value={stats?.totalAlerts || 0}
-          icon={AlertTriangle}
+          title="ML Predictions"
+          value={counts.mlCount}
+          icon={Database}
+          color="orange"
+        />
+        <StatCard
+          title="CNN Detections"
+          value={counts.cnnFire}
+          icon={Cpu}
           color="red"
         />
         <StatCard
-          title="Avg Danger Score"
-          value={stats?.avgDangerScore || 0}
-          icon={TrendingUp}
+          title="CCTV Detections"
+          value={counts.cctvFire}
+          icon={Video}
           color="blue"
-          subtitle="out of 100"
-        />
-        <StatCard
-          title="Last Updated"
-          value="Live"
-          icon={Clock}
-          color="green"
-          subtitle="Real-time monitoring"
         />
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ChartCard
-          title="Fire Detection by Source"
-          type="pie"
-          data={chartData}
-          dataKey="value"
-          colors={['#f97316', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6']}
-        />
-        <ChartCard
-          title="Fire Causes Distribution"
-          type="bar"
-          data={Object.entries(stats?.firesByCause || {}).map(([name, value]) => ({ name, value }))}
-          dataKey="value"
-          xKey="name"
-          colors={['#f97316']}
-        />
-      </div>
-
-      {/* Recent Events */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">Recent Fire Events</h2>
-          <a href="/fire-events" className="text-orange-600 hover:text-orange-700 font-semibold text-sm">
-            View All →
-          </a>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {recentEvents.length > 0 ? (
-            recentEvents.map((event, index) => (
-              <FireEventCard key={event.id || index} event={event} />
-            ))
-          ) : (
-            <div className="col-span-3 text-center py-12 bg-gray-50 rounded-lg">
-              <Flame className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No fire events detected yet</p>
+      {/* GIS Heatmap Section */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Fire Distribution - GIS Heatmap</h2>
+        <div className="w-full h-96 bg-gray-100 rounded-lg flex items-center justify-center relative border border-gray-200 overflow-hidden">
+          <svg className="w-full h-full" viewBox="0 0 800 400" preserveAspectRatio="none">
+            <defs>
+              <radialGradient id="mainHeat" cx="35%" cy="40%">
+                <stop offset="0%" stopColor="#ef4444" stopOpacity="0.8" />
+                <stop offset="60%" stopColor="#f59e0b" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            {(counts.cnnFire > 0 || counts.cctvFire > 0) && (
+               <circle cx="400" cy="200" r="130" fill="url(#mainHeat)" />
+            )}
+            <circle cx="400" cy="200" r="6" fill="#b91c1c" stroke="white" strokeWidth="2" />
+          </svg>
+          
+          <div className="absolute top-4 right-4 bg-white/80 p-3 rounded-md shadow-sm text-xs space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div> <span>Active Fire Hotspots</span>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Recent Alerts */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">Recent Alerts</h2>
-          <a href="/alerts" className="text-orange-600 hover:text-orange-700 font-semibold text-sm">
-            View All →
-          </a>
-        </div>
-        <div className="bg-white rounded-lg shadow-md p-4">
-          {recentAlerts.length > 0 ? (
-            <div className="space-y-3">
-              {recentAlerts.map((alert, index) => (
-                <div key={alert.id || index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <AlertTriangle className="w-5 h-5 text-orange-500" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-900">{alert.message}</p>
-                    <p className="text-xs text-gray-500">{alert.source} • {new Date(alert.timestamp || alert.time).toLocaleString()}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No alerts yet</p>
-            </div>
-          )}
+            <div className="text-gray-500 italic">Tracking {counts.cnnFire + counts.cctvFire} live sources</div>
+          </div>
         </div>
       </div>
     </div>

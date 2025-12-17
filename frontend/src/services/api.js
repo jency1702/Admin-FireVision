@@ -22,7 +22,7 @@ export const createFireEvent = async (eventData) => {
 };
 
 export const getStatistics = async () => {
-  const response = await api.get("/fire-events/statistics");
+  const response = await api.get("/api/fire-events/statistics");
   return response.data;
 };
 

@@ -288,3 +288,7 @@ const FireDetection = () => {
 };
 
 export default FireDetection;
+
+
+
+
