@@ -1,69 +1,142 @@
+
+
+
 import React, { useState } from "react";
-import { Video, Flame, Wifi, WifiOff, Loader2, Camera } from "lucide-react";
-// import {
-//   predictFireCNN,
-//   saveFireEvent,
-//   createAlert,
-// } from "../services/mlApi";
-import { predictFireCNN, createAlert, predictFireTypeML, predictFireCCTV } from '../services/mlApi';
+// Added Activity to the imports below
+import { Video, Flame, WifiOff, Loader2, Camera, Activity } from "lucide-react";
+import { predictFireCCTV, createAlert, saveFireEvent } from '../services/mlApi';
+
 const CCTVMonitoring = () => {
   const [streamUrl, setStreamUrl] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [capturedFrame, setCapturedFrame] = useState(null);
   const [result, setResult] = useState(null);
 
   const captureFrame = async () => {
-  try {
-    // ✅ Call Python ML backend
-    const mlResult = await predictFireCCTV(streamUrl);
+    if (!streamUrl) return alert("Please enter a Stream URL first");
     
-    setResult({
-      label: mlResult.label,
-      fireProbability: mlResult.fireProbability,
-      dangerScore: mlResult.dangerScore,
-      cause: mlResult.cause,
-      confidence: mlResult.confidence
-    });
-
-    if (mlResult.label === 'Fire') {
-      // Send alert
-      await createAlert({
-        source: 'CCTV',
-        message: `Fire detected (${mlResult.cause})`
+    setLoading(true);
+    try {
+      // 1. Call Python ML backend
+      const mlResult = await predictFireCCTV(streamUrl);
+      
+      setResult({
+        label: mlResult.label,
+        fireProbability: mlResult.fireProbability,
+        dangerScore: mlResult.dangerScore,
+        cause: mlResult.cause,
+        confidence: mlResult.confidence
       });
+
+      // 2. SAVE TO DATABASE (Updates Dashboard CCTV count)
+      const dbPayload = {
+        source: 'CCTV Stream', 
+        label: mlResult.label,
+        fireProbability: mlResult.fireProbability,
+        dangerScore: mlResult.dangerScore || 0,
+        cause: mlResult.cause || "N/A",
+        confidence: mlResult.confidence || 0,
+        timestamp: new Date()
+      };
+
+      await saveFireEvent(dbPayload);
+
+      // 3. TRIGGER DASHBOARD REFRESH
+      window.dispatchEvent(new CustomEvent('predictionUpdate'));
+
+      if (mlResult.label === 'Fire') {
+        await createAlert({
+          source: 'CCTV Monitoring',
+          message: `🔥 Fire detected! Type: ${mlResult.cause || 'Unknown'}`
+        });
+      }
+    } catch (error) {
+      console.error("CCTV Analysis Error:", error);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error(error);
-  }
-};
-  
+  };
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">CCTV Fire Monitoring</h1>
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">CCTV Fire Monitoring</h1>
+        <p className="text-gray-600">Analyze real-time RTSP/HTTP video streams</p>
+      </div>
 
-      <input
-        value={streamUrl}
-        onChange={(e) => setStreamUrl(e.target.value)}
-        placeholder="RTSP / HTTP URL"
-        className="border p-2 w-full mb-3"
-      />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-black rounded-lg aspect-video flex items-center justify-center overflow-hidden border-4 border-gray-800 shadow-xl relative">
+            {streamUrl ? (
+              <img 
+                src={streamUrl} 
+                alt="CCTV Feed" 
+                className="w-full h-full object-cover"
+                onError={(e) => { e.target.style.display='none'; }} 
+              />
+            ) : (
+              <div className="text-gray-500 flex flex-col items-center">
+                <Video className="w-16 h-16 mb-2 opacity-20" />
+                <p>No Active Stream URL</p>
+              </div>
+            )}
+            
+            {result?.label === 'Fire' && (
+              <div className="absolute top-4 left-4 bg-red-600 text-white px-4 py-2 rounded-full flex items-center gap-2 animate-pulse font-bold">
+                <Flame className="w-5 h-5" /> FIRE DETECTED
+              </div>
+            )}
+          </div>
 
-      <button
-        onClick={captureFrame}
-        disabled={loading}
-        className="bg-orange-600 text-white px-4 py-2 rounded"
-      >
-        {loading ? "Analyzing..." : "Capture & Analyze"}
-      </button>
-
-      {result && (
-        <div className="mt-4 p-4 border rounded">
-          <p>Status: <b>{result.label}</b></p>
-          <p>Probability: {(result.fireProbability * 100).toFixed(1)}%</p>
+          <div className="flex gap-2">
+            <input
+              value={streamUrl}
+              onChange={(e) => setStreamUrl(e.target.value)}
+              placeholder="Enter Stream URL"
+              className="flex-1 border border-gray-300 p-3 rounded-lg outline-none"
+            />
+            <button
+              onClick={captureFrame}
+              disabled={loading}
+              className={`px-6 py-2 rounded-lg font-bold text-white transition flex items-center gap-2 ${loading ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'}`}
+            >
+              {loading ? <Loader2 className="animate-spin" /> : <Camera />}
+              {loading ? "Analyzing..." : "Analyze Frame"}
+            </button>
+          </div>
         </div>
-      )}
+
+        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-orange-600" />
+            Analysis Results
+          </h2>
+          
+          {result ? (
+            <div className="space-y-4">
+              <div className={`p-4 rounded-lg border-2 text-center ${result.label === 'Fire' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-green-50 border-green-500 text-green-700'}`}>
+                <p className="text-xs uppercase font-bold opacity-70">Detection Status</p>
+                <p className="text-2xl font-black">{result.label.toUpperCase()}</p>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between border-b pb-1">
+                  <span className="text-gray-500">Probability:</span>
+                  <span className="font-bold">{(result.fireProbability * 100).toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between border-b pb-1">
+                  <span className="text-gray-500">Cause:</span>
+                  <span className="font-bold">{result.cause || "N/A"}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-400 text-center py-20">
+              <WifiOff className="w-12 h-12 mx-auto mb-2 opacity-20" />
+              <p>Connect and analyze to see data</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
