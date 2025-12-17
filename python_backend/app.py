@@ -1,50 +1,43 @@
 # python_backend/app.py
-# Python API Server for ML/CNN Models
+# UPDATED: Uses EXACT logic from your Streamlit code
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import numpy as np
+import pandas as pd
 import base64
 from io import BytesIO
 from PIL import Image
 import cv2
+from datetime import datetime
 
 # ML imports
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-import pickle
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 
 # CNN imports
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for React frontend
+CORS(app)
 
 # -------------------------------------------------------
-# LOAD MODELS (Load once when server starts)
+# LOAD MODELS (Same as Streamlit)
 # -------------------------------------------------------
 
-# Load CNN Model
-print("Loading CNN model...")
+print("🔥 Loading CNN model...")
 cnn_model = load_model("fire_cnn_model.h5")
 IMG_SIZE = 224
 print("✓ CNN model loaded")
 
-# Load ML Model Components
-print("Loading ML model...")
-# Assuming you saved your trained model and scaler
-# ml_model = pickle.load(open('ml_fire_model.pkl', 'rb'))
-# scaler = pickle.load(open('scaler.pkl', 'rb'))
-# label_encoder = pickle.load(open('label_encoder.pkl', 'rb'))
-
-# For now, we'll recreate it (replace with loading saved model)
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-
+print("🔥 Loading ML model...")
+# Load dataset (EXACT same code as Streamlit)
 df = pd.read_csv("fire_detection/data/fire_prediction_final_dataset.csv")
 
 def assign_fire_type(row):
+    """EXACT same function from Streamlit"""
     b, t, c, nd, lon = row["brightness"], row["bright_t31"], row["confidence"], row["NDVI"], row["longitude"]
     if 320<=b<=340 and 290<=t<=300 and c>80: return "Static Fire"
     if 300<=b<=330 and lon<-60: return "Offshore Fire"
@@ -55,32 +48,32 @@ def assign_fire_type(row):
     return "Other"
 
 df["fire_type"] = df.apply(assign_fire_type, axis=1)
+
 features = ["NDVI","bright_t31","brightness","confidence","temperature","humidity","wind_speed"]
 df = df.dropna(subset=features)
 
 X = df[features]
 y = df["fire_type"]
 
-label_encoder = LabelEncoder()
-y = label_encoder.fit_transform(y)
+le = LabelEncoder()
+y = le.fit_transform(y)
 
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-ml_model = RandomForestClassifier()
-ml_model.fit(X_train, y_train)
-print("✓ ML model loaded")
-
+# ONLY RANDOM FOREST (same as Streamlit)
+ML_MODEL = RandomForestClassifier(random_state=42)
+ML_MODEL.fit(X_train, y_train)
+print("✓ ML model loaded and trained")
 
 # -------------------------------------------------------
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS (EXACT from Streamlit)
 # -------------------------------------------------------
 
 def base64_to_image(base64_string):
-    """Convert base64 string to PIL Image"""
-    # Remove data URL prefix if present
+    """Convert base64 string to PIL Image (same as Streamlit)"""
     if ',' in base64_string:
         base64_string = base64_string.split(',')[1]
     
@@ -90,7 +83,7 @@ def base64_to_image(base64_string):
 
 
 def calculate_fire_risk(image, fire_prob):
-    """Calculate fire danger score"""
+    """EXACT same function from Streamlit"""
     img = np.array(image.resize((224, 224)))
     r, g, b = img[:,:,0], img[:,:,1], img[:,:,2]
 
@@ -105,7 +98,7 @@ def calculate_fire_risk(image, fire_prob):
 
 
 def predict_fire_cause(image):
-    """Predict fire cause from image"""
+    """EXACT same function from Streamlit"""
     img = np.array(image.resize((224, 224)))
     r, g, b = img[:,:,0], img[:,:,1], img[:,:,2]
 
@@ -136,9 +129,10 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'models_loaded': {
-            'cnn': True,
-            'ml': True
+        'timestamp': datetime.now().isoformat(),
+        'models': {
+            'cnn': 'loaded',
+            'ml': 'loaded'
         }
     })
 
@@ -147,22 +141,7 @@ def health_check():
 def predict_cnn():
     """
     CNN Fire Detection from Image
-    
-    Request body:
-    {
-        "image": "base64_encoded_image_string"
-    }
-    
-    Response:
-    {
-        "success": true,
-        "label": "Fire" | "No Fire",
-        "fireProbability": 0.85,
-        "rawOutput": 0.15,
-        "dangerScore": 75,
-        "cause": "Electrical Fire",
-        "confidence": 82
-    }
+    EXACT same logic as Streamlit "Fire Image Detection" tab
     """
     try:
         data = request.get_json()
@@ -171,10 +150,10 @@ def predict_cnn():
             return jsonify({'success': False, 'error': 'No image provided'}), 400
         
         # Convert base64 to image
-        image = base64_to_image(data['image'])
+        img = base64_to_image(data['image'])
         
-        # Prepare image for CNN
-        arr = img_to_array(image.resize((IMG_SIZE, IMG_SIZE))) / 255.0
+        # EXACT same CNN prediction as Streamlit
+        arr = img_to_array(img.resize((IMG_SIZE, IMG_SIZE))) / 255.0
         arr = np.expand_dims(arr, 0)
         
         # Predict with CNN
@@ -182,29 +161,32 @@ def predict_cnn():
         fire_prob = 1 - result
         label = "Fire" if result < 0.5 else "No Fire"
         
+        # Base response (same as Streamlit rec dict)
         response = {
             'success': True,
-            'label': label,
+            'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'source': 'CNN Image Upload',
+            'raw_output': float(result),
             'fireProbability': float(fire_prob),
-            'rawOutput': float(result)
+            'label': label,
+            'dangerScore': None,
+            'cause': None,
+            'confidence': None
         }
         
-        # If fire detected, calculate additional metrics
+        # If fire detected, calculate additional metrics (same as Streamlit)
         if result < 0.5:
-            danger_score = calculate_fire_risk(image, fire_prob)
-            cause, conf = predict_fire_cause(image)
+            danger_score = calculate_fire_risk(img, fire_prob)
+            cause, conf = predict_fire_cause(img)
             
             response['dangerScore'] = danger_score
             response['cause'] = cause
             response['confidence'] = conf
-        else:
-            response['dangerScore'] = None
-            response['cause'] = None
-            response['confidence'] = None
         
         return jsonify(response)
         
     except Exception as e:
+        print(f"Error in CNN prediction: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -212,57 +194,51 @@ def predict_cnn():
 def predict_ml():
     """
     ML Fire Type Prediction
-    
-    Request body:
-    {
-        "ndvi": 0.3,
-        "brightness": 350,
-        "t31": 295,
-        "confidence": 85,
-        "temperature": 30,
-        "humidity": 45,
-        "windSpeed": 8
-    }
-    
-    Response:
-    {
-        "success": true,
-        "prediction": "Vegetation Fire"
-    }
+    EXACT same logic as Streamlit "Fire Type Prediction" tab
     """
     try:
         data = request.get_json()
         
-        # Extract features
-        features_list = [
-            data.get('ndvi', 0),
-            data.get('t31', 290),
-            data.get('brightness', 300),
-            data.get('confidence', 80),
-            data.get('temperature', 25),
-            data.get('humidity', 50),
-            data.get('windSpeed', 5)
-        ]
+        # Extract features (EXACT order as Streamlit)
+        # features = ["NDVI","bright_t31","brightness","confidence","temperature","humidity","wind_speed"]
+        NDVI = data.get('ndvi', 0)
+        t31 = data.get('t31', 290)
+        brightness = data.get('brightness', 300)
+        conf = data.get('confidence', 80)
+        temp = data.get('temperature', 25)
+        hum = data.get('humidity', 50)
+        wind = data.get('windSpeed', 5)
         
-        # Prepare input
-        input_data = np.array([features_list])
-        input_scaled = scaler.transform(input_data)
+        # Create input array (EXACT same as Streamlit)
+        inp = np.array([[NDVI, t31, brightness, conf, temp, hum, wind]])
+        inp_scaled = scaler.transform(inp)
         
-        # Predict
-        prediction = ml_model.predict(input_scaled)[0]
-        fire_type = label_encoder.inverse_transform([prediction])[0]
+        # Predict (EXACT same as Streamlit)
+        pred = ML_MODEL.predict(inp_scaled)[0]
+        fire_type = le.inverse_transform([pred])[0]
         
-        # Get prediction probability (confidence)
-        probabilities = ml_model.predict_proba(input_scaled)[0]
+        # Get confidence
+        probabilities = ML_MODEL.predict_proba(inp_scaled)[0]
         confidence = float(max(probabilities) * 100)
         
         return jsonify({
             'success': True,
+            'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'prediction': fire_type,
-            'confidence': confidence
+            'confidence': confidence,
+            'inputs': {
+                'NDVI': NDVI,
+                'Brightness': brightness,
+                'T31': t31,
+                'Confidence': conf,
+                'Temperature': temp,
+                'Humidity': hum,
+                'Wind Speed': wind
+            }
         })
         
     except Exception as e:
+        print(f"Error in ML prediction: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -270,56 +246,63 @@ def predict_ml():
 def predict_cctv():
     """
     CCTV Frame Analysis
-    
-    Request body:
-    {
-        "streamUrl": "http://...",
-        "frame": "base64_encoded_frame" (optional)
-    }
-    
-    Response: Same as /predict/cnn
+    EXACT same logic as Streamlit "Real-Time CCTV Monitoring" tab
     """
     try:
         data = request.get_json()
         
         if 'frame' in data:
             # Use provided frame
-            image = base64_to_image(data['frame'])
+            img = base64_to_image(data['frame'])
         elif 'streamUrl' in data:
-            # Capture frame from stream
+            # Capture frame from stream (same as Streamlit)
             stream_url = data['streamUrl']
             cap = cv2.VideoCapture(stream_url)
             ret, frame = cap.read()
             cap.release()
             
             if not ret:
-                return jsonify({'success': False, 'error': 'Could not capture frame from stream'}), 400
+                return jsonify({
+                    'success': False, 
+                    'error': 'Could not fetch frame from stream'
+                }), 400
             
-            # Convert CV2 frame to PIL Image
+            # Convert CV2 frame to PIL Image (same as Streamlit)
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(frame_rgb)
+            img = Image.fromarray(frame_rgb)
         else:
-            return jsonify({'success': False, 'error': 'No frame or streamUrl provided'}), 400
+            return jsonify({
+                'success': False, 
+                'error': 'No frame or streamUrl provided'
+            }), 400
         
-        # Use same CNN prediction logic
-        arr = img_to_array(image.resize((IMG_SIZE, IMG_SIZE))) / 255.0
+        # EXACT same prediction logic as Streamlit CCTV tab
+        resized = cv2.resize(np.array(img), (IMG_SIZE, IMG_SIZE))
+        arr = img_to_array(resized) / 255.0
         arr = np.expand_dims(arr, 0)
         
         result = cnn_model.predict(arr)[0][0]
         fire_prob = 1 - result
         label = "Fire" if result < 0.5 else "No Fire"
         
+        # Base response (same as Streamlit rec dict)
         response = {
             'success': True,
-            'label': label,
+            'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'source': 'CCTV Stream',
+            'raw_output': float(result),
             'fireProbability': float(fire_prob),
-            'rawOutput': float(result),
-            'timestamp': pd.Timestamp.now().isoformat()
+            'label': label,
+            'dangerScore': None,
+            'cause': None,
+            'confidence': None,
+            'timestamp': datetime.now().isoformat()
         }
         
+        # If fire detected (same as Streamlit)
         if result < 0.5:
-            danger_score = calculate_fire_risk(image, fire_prob)
-            cause, conf = predict_fire_cause(image)
+            danger_score = calculate_fire_risk(img, fire_prob)
+            cause, conf = predict_fire_cause(img)
             
             response['dangerScore'] = danger_score
             response['cause'] = cause
@@ -328,6 +311,7 @@ def predict_cctv():
         return jsonify(response)
         
     except Exception as e:
+        print(f"Error in CCTV prediction: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -336,13 +320,20 @@ def predict_cctv():
 # -------------------------------------------------------
 
 if __name__ == '__main__':
-    print("\n" + "="*50)
+    print("\n" + "="*70)
     print("🔥 FireVision ML/CNN API Server")
-    print("="*50)
+    print("="*70)
     print("✓ CNN Model: Loaded")
-    print("✓ ML Model: Loaded")
-    print("✓ Server: Running on http://localhost:5001")
-    print("="*50 + "\n")
+    print("✓ ML Model: Random Forest (Trained)")
+    print("✓ Logic: EXACT match with Streamlit")
+    print(f"✓ Server: Running on http://localhost:5001")
+    print("="*70)
+    print("\nEndpoints:")
+    print("  GET  /health            - Health check")
+    print("  POST /predict/cnn       - CNN fire detection")
+    print("  POST /predict/ml        - ML fire type prediction")
+    print("  POST /predict/cctv      - CCTV stream analysis")
+    print("="*70 + "\n")
     
-    # Run on port 5001 (different from Node backend)
+    # Run on port 5001
     app.run(host='0.0.0.0', port=5001, debug=True)

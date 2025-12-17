@@ -10,149 +10,42 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for adding auth token if needed
-api.interceptors.request.use(
-  (config) => {
-    // Add auth token here if you implement authentication
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Response interceptor for error handling
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error("API Error:", error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);
-
-// ============================================
-// Fire Events API
-// ============================================
+// Fire Events
 export const getFireEvents = async () => {
-  try {
-    const response = await api.get("/fire-events");
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching fire events:", error);
-    return { success: false, data: [] };
-  }
+  const response = await api.get("/fire-events");
+  return response.data;
 };
 
 export const createFireEvent = async (eventData) => {
-  try {
-    const response = await api.post("/fire-events", eventData);
-    return response.data;
-  } catch (error) {
-    console.error("Error creating fire event:", error);
-    throw error;
-  }
-};
-
-export const getFireEventById = async (id) => {
-  try {
-    const response = await api.get(`/fire-events/${id}`);
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching fire event:", error);
-    throw error;
-  }
+  const response = await api.post("/fire-events", eventData);
+  return response.data;
 };
 
 export const getStatistics = async () => {
-  try {
-    const response = await api.get("/fire-events/statistics");
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching statistics:", error);
-    return {
-      success: false,
-      data: {
-        totalFires: 0,
-        totalAlerts: 0,
-        avgDangerScore: 0,
-        firesBySource: {},
-        firesByCause: {},
-      },
-    };
-  }
+  const response = await api.get("/fire-events/statistics");
+  return response.data;
 };
 
-// ============================================
-// Alerts API
-// ============================================
+// Alerts
 export const getAlerts = async () => {
-  try {
-    const response = await api.get("/alerts");
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching alerts:", error);
-    return { success: false, data: [] };
-  }
+  const response = await api.get("/alerts");
+  return response.data;
 };
 
 export const createAlert = async (alertData) => {
-  try {
-    const response = await api.post("/alerts", alertData);
-    return response.data;
-  } catch (error) {
-    console.error("Error creating alert:", error);
-    throw error;
-  }
+  const response = await api.post("/alerts", alertData);
+  return response.data;
 };
 
-// ============================================
-// ML Predictions API
-// ============================================
+// ML/CNN Predictions
 export const getMLPredictions = async () => {
-  try {
-    const response = await api.get("/predictions/ml");
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching ML predictions:", error);
-    return { success: false, data: [] };
-  }
+  const response = await api.get("/predictions/ml");
+  return response.data;
 };
 
-export const createMLPrediction = async (predictionData) => {
-  try {
-    const response = await api.post("/predictions/ml", predictionData);
-    return response.data;
-  } catch (error) {
-    console.error("Error creating ML prediction:", error);
-    throw error;
-  }
-};
-
-// ============================================
-// CNN Predictions API
-// ============================================
 export const getCNNPredictions = async () => {
-  try {
-    const response = await api.get("/predictions/cnn");
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching CNN predictions:", error);
-    return { success: false, data: [] };
-  }
-};
-
-export const createCNNPrediction = async (predictionData) => {
-  try {
-    const response = await api.post("/predictions/cnn", predictionData);
-    return response.data;
-  } catch (error) {
-    console.error("Error creating CNN prediction:", error);
-    throw error;
-  }
+  const response = await api.get("/predictions/cnn");
+  return response.data;
 };
 
 export default api;

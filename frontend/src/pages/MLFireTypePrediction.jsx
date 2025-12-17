@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Database, TrendingUp, AlertCircle, Sun, Thermometer, Wind, Droplets, Loader2 } from 'lucide-react';
 // import { createMLPrediction } from '../services/api';
-import { predictFireTypeML } from '../services/mlApi';
+import { predictFireTypeML, saveMLPrediction } from '../services/mlApi';
 const MLFireTypePrediction = () => {
   const [formData, setFormData] = useState({
     ndvi: 0,
@@ -24,24 +24,24 @@ const MLFireTypePrediction = () => {
       [name]: parseFloat(value) || 0
     }));
   };
-
   const predictFireType = async () => {
-    setLoading(true);
+  try {
+    // ✅ Call Python ML backend
+    const mlResult = await predictFireTypeML({
+      ndvi: formData.ndvi,
+      brightness: formData.brightness,
+      t31: formData.t31,
+      confidence: formData.confidence,
+      temperature: formData.temperature,
+      humidity: formData.humidity,
+      windSpeed: formData.windSpeed
+    });
     
-    try {
-      // Simulate ML prediction (replace with actual API call to Python backend)
-      
-      
-      // Mock fire type prediction based on input values
-      const mlResult = await predictFireTypeML(formData);
-      setPrediction(mlResult.fire_type);
-
-    } catch (error) {
-      console.error('Error predicting fire type:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setPrediction(mlResult.prediction);
+  } catch (error) {
+    console.error(error);
+  }
+};
 
   const getFireTypeColor = (type) => {
     const colors = {
