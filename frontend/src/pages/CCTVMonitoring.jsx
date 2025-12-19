@@ -46,7 +46,7 @@ const CCTVMonitoring = () => {
       if (mlResult.label === 'Fire') {
         await createAlert({
           source: 'CCTV Monitoring',
-          message: `🔥 Fire detected! Type: ${mlResult.cause || 'Unknown'}`
+          message: `Fire detected! Type: ${mlResult.cause || 'Unknown'}`
         });
       }
     } catch (error) {
@@ -60,7 +60,7 @@ const CCTVMonitoring = () => {
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">CCTV Fire Monitoring</h1>
-        <p className="text-gray-600">Analyze real-time RTSP/HTTP video streams</p>
+        <p className="text-gray-600">Analyze real-time HTTP video streams</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

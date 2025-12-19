@@ -74,7 +74,7 @@ const FireDetection = () => {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Fire Image Detection</h1>
-        <p className="text-gray-600 mt-1">Upload an image to detect fire using CNN model</p>
+
       </div>
 
       {/* Error Alert */}
@@ -274,15 +274,8 @@ const FireDetection = () => {
         </div>
       </div>
 
-      {/* Info Section */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-        <h3 className="font-bold text-blue-900 mb-2">How it works</h3>
-        <p className="text-blue-800 text-sm">
-          Our CNN (Convolutional Neural Network) model analyzes the uploaded image to detect fire presence, 
-          calculate danger levels, and predict the most likely cause of the fire based on visual patterns.
-          The model is running on a Python backend server.
-        </p>
-      </div>
+   
+      
     </div>
   );
 };

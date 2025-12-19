@@ -1,68 +1,69 @@
-// frontend/src/pages/MLFireTypePrediction.jsx
-import React, { useState } from 'react';
-import { Database, TrendingUp, AlertCircle, Sun, Thermometer, Wind, Droplets, Loader2 } from 'lucide-react';
-import { predictFireTypeML, saveMLPrediction } from '../services/mlApi';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, Loader2, Database, Clock } from 'lucide-react';
+import { predictFireTypeML, saveMLPrediction, getMLPredictions } from '../services/mlApi';
 
 const MLFireTypePrediction = () => {
   const [formData, setFormData] = useState({
-    ndvi: 0,
-    brightness: 300,
-    t31: 290,
-    confidence: 80,
-    temperature: 25,
-    humidity: 50,
-    windSpeed: 5
+    ndvi: '',
+    brightness: '',
+    t31: '',
+    confidence: '',
+    temperature: '',
+    humidity: '',
+    windSpeed: ''
   });
 
   const [loading, setLoading] = useState(false);
   const [prediction, setPrediction] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const fetchHistory = async () => {
+    try {
+      const data = await getMLPredictions();
+      setHistory(data.data || data);
+    } catch (error) {
+      console.error("Failed to fetch history:", error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    // Removing the "|| 0" allows the field to be empty so the '0' doesn't stay in front
     setFormData(prev => ({
       ...prev,
-      [name]: parseFloat(value) || 0
+      [name]: value === '' ? '' : parseFloat(value)
     }));
   };
 
   const predictFireType = async () => {
     setLoading(true);
     try {
-      // 1. Call Python ML backend
-      const mlResult = await predictFireTypeML({
-        ndvi: formData.ndvi,
-        brightness: formData.brightness,
-        t31: formData.t31,
-        confidence: formData.confidence,
-        temperature: formData.temperature,
-        humidity: formData.humidity,
-        windSpeed: formData.windSpeed
-      });
+      // Convert any empty strings to 0 for the API call
+      const submissionData = Object.fromEntries(
+        Object.entries(formData).map(([k, v]) => [k, v === '' ? 0 : v])
+      );
 
+      const mlResult = await predictFireTypeML(submissionData);
       const predictedType = mlResult.prediction;
       setPrediction(predictedType);
 
-      // 2. Save to MongoDB in background
-      const dbPayload = {
-        ndvi: formData.ndvi,
-        brightness: formData.brightness,
-        t31: formData.t31,
-        confidence: formData.confidence,
-        temperature: formData.temperature,
-        humidity: formData.humidity,
-        windSpeed: formData.windSpeed,
-        prediction: predictedType
-      };
-
+      const dbPayload = { ...submissionData, prediction: predictedType };
       await saveMLPrediction(dbPayload);
 
-      // 3. Trigger Dashboard Sync
+      fetchHistory();
+
       window.dispatchEvent(new CustomEvent('predictionUpdate', {
         detail: { fireCount: predictedType !== 'Other' ? 1 : 0, noFireCount: 0 }
       }));
-
     } catch (error) {
-      console.error("Prediction or Saving failed:", error);
+      console.error("Prediction failed:", error);
     } finally {
       setLoading(false);
     }
@@ -70,13 +71,13 @@ const MLFireTypePrediction = () => {
 
   const getFireTypeColor = (type) => {
     const colors = {
-      'Static Fire': 'bg-blue-100 text-blue-800 border-blue-300',
-      'Offshore Fire': 'bg-cyan-100 text-cyan-800 border-cyan-300',
-      'Vegetation Fire': 'bg-green-100 text-green-800 border-green-300',
-      'Agricultural Fire': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      'Urban Fire': 'bg-red-100 text-red-800 border-red-300',
-      'Lightning Fire': 'bg-purple-100 text-purple-800 border-purple-300',
-      'Other': 'bg-gray-100 text-gray-800 border-gray-300'
+      'Static Fire': 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300',
+      'Offshore Fire': 'bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-900/30 dark:text-cyan-300',
+      'Vegetation Fire': 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300',
+      'Agricultural Fire': 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300',
+      'Urban Fire': 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300',
+      'Lightning Fire': 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300',
+      'Other': 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700 dark:text-gray-300'
     };
     return colors[type] || colors['Other'];
   };
@@ -84,69 +85,31 @@ const MLFireTypePrediction = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">ML Fire Type Prediction</h1>
-        <p className="text-gray-600 mt-1">Predict fire type using environmental and satellite data</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">ML Fire Type Prediction</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Form */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <Database className="w-6 h-6 text-blue-600" />
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
             Input Parameters
           </h2>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Sun className="w-4 h-4 text-green-600" /> NDVI
-              </label>
-              <input type="number" name="ndvi" value={formData.ndvi} onChange={handleInputChange} step="0.0001" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Sun className="w-4 h-4 text-orange-600" /> Brightness (K)
-              </label>
-              <input type="number" name="brightness" value={formData.brightness} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Thermometer className="w-4 h-4 text-red-600" /> T31 Temperature (K)
-              </label>
-              <input type="number" name="t31" value={formData.t31} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <TrendingUp className="w-4 h-4 text-purple-600" /> Confidence (%)
-              </label>
-              <input type="number" name="confidence" value={formData.confidence} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Thermometer className="w-4 h-4 text-red-600" /> Air Temp (°C)
-              </label>
-              <input type="number" name="temperature" value={formData.temperature} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Droplets className="w-4 h-4 text-blue-600" /> Humidity (%)
-              </label>
-              <input type="number" name="humidity" value={formData.humidity} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Wind className="w-4 h-4 text-cyan-600" /> Wind Speed (m/s)
-              </label>
-              <input type="number" name="windSpeed" value={formData.windSpeed} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" />
-            </div>
+            {Object.keys(formData).map((key) => (
+              <div key={key}>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 capitalize">
+                  {key.replace(/([A-Z])/g, ' $1')}
+                </label>
+                <input
+                  type="number"
+                  name={key}
+                  value={formData[key]}
+                  onChange={handleInputChange}
+                  placeholder="Enter value..."
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                />
+              </div>
+            ))}
           </div>
-
           <button
             onClick={predictFireType}
             disabled={loading}
@@ -156,91 +119,82 @@ const MLFireTypePrediction = () => {
           </button>
         </div>
 
-        {/* Right Column: Results & Parameters */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Prediction Result</h2>
-
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Current Result</h2>
           {!prediction && !loading && (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-              <Database className="w-16 h-16 mb-4 opacity-50" />
-              <p className="text-center text-sm">Enter parameters and click "Predict" to see classification</p>
+              <Database className="w-16 h-16 mb-4 opacity-20" />
+              <p className="text-center text-sm">Enter parameters to see classification</p>
             </div>
           )}
-
-          {loading && (
-            <div className="flex flex-col items-center justify-center h-64">
-              <Loader2 className="w-16 h-16 text-orange-600 animate-spin mb-4" />
-              <p className="text-gray-600">Running ML model...</p>
-            </div>
-          )}
-
           {prediction && !loading && (
             <div className="space-y-6">
               <div className={`p-6 rounded-lg border-2 ${getFireTypeColor(prediction)} text-center`}>
                 <p className="text-sm font-semibold mb-2">Predicted Fire Type</p>
                 <p className="text-3xl font-bold">{prediction}</p>
               </div>
-
-              {/* restored parameters summary */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-gray-900 border-b pb-1">Input Summary</h3>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-600">NDVI:</span><span className="font-semibold">{formData.ndvi.toFixed(4)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Brightness:</span><span className="font-semibold">{formData.brightness} K</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">T31:</span><span className="font-semibold">{formData.t31} K</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Confidence:</span><span className="font-semibold">{formData.confidence}%</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Temperature:</span><span className="font-semibold">{formData.temperature}°C</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Humidity:</span><span className="font-semibold">{formData.humidity}%</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Wind Speed:</span><span className="font-semibold">{formData.windSpeed} m/s</span></div>
-                </div>
-              </div>
-
-              <button onClick={() => setPrediction(null)} className="w-full py-2 px-4 border-2 border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-50">
-                New Prediction
+              <button onClick={() => setPrediction(null)} className="w-full py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                Clear Result
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Info Section */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-blue-900 mb-1 text-sm">Fire Type Classifications</h3>
-            <div className="text-blue-800 text-xs space-y-1">
-              <p><strong>Static Fire:</strong> Stationary fire with consistent brightness</p>
-              <p><strong>Vegetation Fire:</strong> Fire in areas with high vegetation index</p>
-              <p><strong>Urban Fire:</strong> Fire in low-vegetation urban environments</p>
-            </div>
+      {/* History Table with ALL parameters */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border dark:border-gray-700">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <Clock className="w-6 h-6 text-orange-600" />
+          Detailed Prediction History
+        </h2>
+
+        {loadingHistory ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-orange-600" /></div>
+        ) : history.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
+              <thead>
+                <tr className="border-b dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs uppercase tracking-wider">
+                  <th className="py-3 px-2">Date</th>
+                  <th className="py-3 px-2">Prediction</th>
+                  <th className="py-3 px-2">NDVI</th>
+                  <th className="py-3 px-2">Bright (K)</th>
+                  <th className="py-3 px-2">T31 (K)</th>
+                  <th className="py-3 px-2">Conf %</th>
+                  <th className="py-3 px-2">Temp °C</th>
+                  <th className="py-3 px-2">Hum %</th>
+                  <th className="py-3 px-2">Wind m/s</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y dark:divide-gray-700">
+                {history.slice().reverse().map((item, index) => (
+                  <tr key={item._id || index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition text-sm">
+                    <td className="py-3 px-2 whitespace-nowrap dark:text-gray-300">
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-2">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${getFireTypeColor(item.prediction)}`}>
+                        {item.prediction}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 font-mono dark:text-gray-300">{(item.ndvi || 0).toFixed(4)}</td>
+                    <td className="py-3 px-2 dark:text-gray-300">{item.brightness}</td>
+                    <td className="py-3 px-2 dark:text-gray-300">{item.t31}</td>
+                    <td className="py-3 px-2 dark:text-gray-300">{item.confidence}%</td>
+                    <td className="py-3 px-2 dark:text-gray-300">{item.temperature}</td>
+                    <td className="py-3 px-2 dark:text-gray-300">{item.humidity}</td>
+                    <td className="py-3 px-2 dark:text-gray-300">{item.windSpeed}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        ) : (
+          <p className="text-center text-gray-500 py-10">No historical data available.</p>
+        )}
       </div>
     </div>
   );
 };
 
 export default MLFireTypePrediction;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

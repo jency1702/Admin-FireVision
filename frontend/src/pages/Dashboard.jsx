@@ -68,7 +68,6 @@ const Dashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">Real-time Fire Monitoring Summary</p>
         </div>
         <button 
           onClick={() => { setLoading(true); loadData(); }} 
@@ -81,7 +80,7 @@ const Dashboard = () => {
       {/* Main Stats Row - Now including Total Prediction as a Card */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Predictions"
+          title="Total Events"
           value={counts.total}
           icon={Activity}
           color="orange"
