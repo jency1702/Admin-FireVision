@@ -6,9 +6,7 @@
 import React, { useState } from 'react';
 import { Upload, Flame, AlertTriangle, Camera, Loader2 } from 'lucide-react';
 import {
-  predictFireCNN,
-  saveFireEvent,
-  createAlert
+  predictFireCNN
 } from '../services/mlApi';
 import { createFireEvent,
 } from '../services/api';
@@ -36,6 +34,9 @@ const FireDetection = () => {
 
   const predictFire = async () => {
   try {
+     setLoading(true);          // ✅ START loading
+    setError(null);
+
     // ✅ Call Python ML backend
     const mlResult = await predictFireCNN(imagePreview);
     
@@ -46,6 +47,8 @@ const FireDetection = () => {
       cause: mlResult.cause,
       confidence: mlResult.confidence
     });
+
+   
 
     // Send to Node backend for storage
     await createFireEvent({
@@ -59,6 +62,8 @@ const FireDetection = () => {
     });
   } catch (error) {
     setError(error.message);
+  }finally {
+    setLoading(false); // ✅ IMPORTANT FIX
   }
 };
 
@@ -281,7 +286,6 @@ const FireDetection = () => {
 };
 
 export default FireDetection;
-
 
 
 

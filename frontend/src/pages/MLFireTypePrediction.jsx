@@ -1,6 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, Loader2, Database, Clock } from 'lucide-react';
-import { predictFireTypeML, saveMLPrediction, getMLPredictions } from '../services/mlApi';
+
+
+
+import { useState, useEffect } from 'react';
+import { Loader2, Database } from 'lucide-react';
+import {
+  predictFireTypeML,
+  saveMLPrediction,
+  getMLPredictions
+} from '../services/mlApi';
 
 const MLFireTypePrediction = () => {
   const [formData, setFormData] = useState({
@@ -15,9 +22,18 @@ const MLFireTypePrediction = () => {
 
   const [loading, setLoading] = useState(false);
   const [prediction, setPrediction] = useState(null);
+
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
+  // 🔥 NEW STATES
+  const [selectedHistory, setSelectedHistory] = useState(null);
+  const [aiExplanation, setAiExplanation] = useState('');
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+   
   useEffect(() => {
     fetchHistory();
   }, []);
@@ -27,76 +43,163 @@ const MLFireTypePrediction = () => {
       const data = await getMLPredictions();
       setHistory(data.data || data);
     } catch (error) {
-      console.error("Failed to fetch history:", error);
+      console.error('Failed to fetch history:', error);
     } finally {
       setLoadingHistory(false);
     }
   };
+  const formatDateTime = (dateString) => {
+  return new Date(dateString).toLocaleString(); 
+};
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    // Removing the "|| 0" allows the field to be empty so the '0' doesn't stay in front
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       [name]: value === '' ? '' : parseFloat(value)
     }));
   };
 
+  const downloadPDF = async () => {
+  const today = new Date().toISOString().split('T')[0];  
+  if (!fromDate || !toDate) {
+    alert("Select date range");
+    return;
+  }
+  if (toDate > today || fromDate > today) {
+    alert("The 'To Date' cannot be in the future.");
+    return;
+  }
+  if (fromDate > toDate) {
+    alert("'From Date' cannot be later than 'To Date'");
+    return;
+  }
+  const filtered = history.filter((h) => {
+    const d = new Date(h.createdAt).toISOString().split('T')[0];
+    return d >= fromDate && d <= toDate;
+  });
+  if (filtered.length === 0) {
+    alert("No records found for the selected date range.");
+    return;
+  }
+
+  try {
+    const res = await fetch("http://localhost:5001/download/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        startDate: fromDate,
+        endDate: toDate,
+        records: filtered
+      })
+    });
+
+    if (!res.ok) throw new Error("Failed to generate PDF");
+
+    // 🔥 THE FIX: Get the response as a BLOB, not JSON
+    const blob = await res.blob();
+    
+    // Create a local URL for the binary data
+    const url = window.URL.createObjectURL(blob);
+    
+    // Create a hidden link and click it to trigger the download
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Fire_Report_${fromDate}_to_${toDate}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    link.parentNode.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error("Download error:", error);
+    alert("Error downloading PDF. Check if the backend is running.");
+  }
+};
+
+
+  // ---------------- ML PREDICTION ----------------
+
   const predictFireType = async () => {
     setLoading(true);
     try {
-      // Convert any empty strings to 0 for the API call
       const submissionData = Object.fromEntries(
         Object.entries(formData).map(([k, v]) => [k, v === '' ? 0 : v])
       );
 
       const mlResult = await predictFireTypeML(submissionData);
-      const predictedType = mlResult.prediction;
-      setPrediction(predictedType);
 
-      const dbPayload = { ...submissionData, prediction: predictedType };
-      await saveMLPrediction(dbPayload);
+      setPrediction({
+        type: mlResult.prediction,
+        confidence: mlResult.confidence
+      });
+
+      await saveMLPrediction({
+        ...submissionData,
+        prediction: mlResult.prediction
+      });
 
       fetchHistory();
-
-      window.dispatchEvent(new CustomEvent('predictionUpdate', {
-        detail: { fireCount: predictedType !== 'Other' ? 1 : 0, noFireCount: 0 }
-      }));
     } catch (error) {
-      console.error("Prediction failed:", error);
+      console.error('Prediction failed:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  // ---------------- HISTORY CLICK → PHI-3 ----------------
+
+  const handleHistoryClick = async (item) => {
+    setSelectedHistory(item);
+    setAiExplanation('');
+    setLoadingAI(true);
+
+    try {
+      const res = await fetch('http://localhost:5001/explain/fire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      });
+
+      const data = await res.json();
+      setAiExplanation(data.aiExplanation);
+    } catch (error) {
+      console.error('AI explanation failed:', error);
+      setAiExplanation('Failed to generate explanation.');
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
   const getFireTypeColor = (type) => {
     const colors = {
-      'Static Fire': 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300',
-      'Offshore Fire': 'bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-900/30 dark:text-cyan-300',
-      'Vegetation Fire': 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300',
-      'Agricultural Fire': 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300',
-      'Urban Fire': 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300',
-      'Lightning Fire': 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300',
-      'Other': 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700 dark:text-gray-300'
+      'Static Fire': 'bg-blue-100 text-blue-800 border-blue-300',
+      'Offshore Fire': 'bg-cyan-100 text-cyan-800 border-cyan-300',
+      'Vegetation Fire': 'bg-green-100 text-green-800 border-green-300',
+      'Agricultural Fire': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+      'Urban Fire': 'bg-red-100 text-red-800 border-red-300',
+      'Lightning Fire': 'bg-purple-100 text-purple-800 border-purple-300',
+      Other: 'bg-gray-100 text-gray-800 border-gray-300'
     };
-    return colors[type] || colors['Other'];
+    return colors[type] || colors.Other;
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">ML Fire Type Prediction</h1>
-      </div>
+    <div className="space-y-6 bg-gray-50 p-4 min-h-screen">
+      <h1 className="text-3xl font-bold">ML Fire Type Prediction</h1>
 
+      {/* ---------------- INPUT + RESULT ---------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border dark:border-gray-700">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-            Input Parameters
-          </h2>
+        {/* Input */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-lg border">
+          <h2 className="text-xl font-bold mb-6">Input Parameters</h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {Object.keys(formData).map((key) => (
               <div key={key}>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 capitalize">
+                <label className="block text-sm font-semibold mb-2 capitalize">
                   {key.replace(/([A-Z])/g, ' $1')}
                 </label>
                 <input
@@ -104,95 +207,156 @@ const MLFireTypePrediction = () => {
                   name={key}
                   value={formData[key]}
                   onChange={handleInputChange}
-                  placeholder="Enter value..."
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                  className="w-full px-4 py-2 border rounded-lg"
                 />
               </div>
             ))}
           </div>
+
           <button
             onClick={predictFireType}
             disabled={loading}
-            className={`w-full mt-6 py-3 rounded-lg font-semibold text-white transition flex items-center justify-center gap-2 ${loading ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'}`}
+            className={`w-full mt-6 py-3 rounded-lg font-semibold text-white ${
+              loading ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'
+            }`}
           >
-            {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Predicting...</> : <><TrendingUp className="w-5 h-5" /> Predict Fire Type</>}
+            {loading ? 'Predicting...' : 'Predict Fire Type'}
           </button>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border dark:border-gray-700">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Current Result</h2>
-          {!prediction && !loading && (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-              <Database className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-center text-sm">Enter parameters to see classification</p>
+        {/* Result */}
+        <div className="bg-white p-6 rounded-lg border">
+          <h2 className="text-xl font-bold mb-6">Current Result</h2>
+
+          {!prediction && (
+            <div className="text-gray-400 text-center">
+              <Database className="mx-auto w-16 h-16 mb-4" />
+              Enter parameters to predict
             </div>
           )}
-          {prediction && !loading && (
-            <div className="space-y-6">
-              <div className={`p-6 rounded-lg border-2 ${getFireTypeColor(prediction)} text-center`}>
-                <p className="text-sm font-semibold mb-2">Predicted Fire Type</p>
-                <p className="text-3xl font-bold">{prediction}</p>
-              </div>
-              <button onClick={() => setPrediction(null)} className="w-full py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                Clear Result
-              </button>
+
+          {prediction && (
+            <div
+              className={`p-6 rounded-lg border-2 ${getFireTypeColor(
+                prediction.type
+              )} text-center`}
+            >
+              <p className="text-sm font-semibold mb-2">Predicted Fire Type</p>
+              <p className="text-3xl font-bold">{prediction.type}</p>
+              <p className="mt-2 text-sm">
+                Confidence: {prediction.confidence.toFixed(2)}%
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* History Table with ALL parameters */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border dark:border-gray-700">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-          <Clock className="w-6 h-6 text-orange-600" />
-          Detailed Prediction History
+      <div className="flex gap-4 items-end mb-6">
+  <div>
+    <label className="text-sm font-semibold">From Date   </label>
+    <input
+      type="date"
+      value={fromDate}
+      max={new Date().toISOString().split("T")[0]}// Prevents future selection
+      onChange={(e) => setFromDate(e.target.value)}
+      className="border px-3 py-2 rounded"
+    />
+  </div>
+
+  <div>
+    <label className="text-sm font-semibold">To Date   </label>
+    <input
+      type="date"
+      value={toDate}
+      max={new Date().toISOString().split("T")[0]}
+      onChange={(e) => setToDate(e.target.value)}
+      className="border px-3 py-2 rounded"
+    />
+  </div>
+
+  <button
+    onClick={downloadPDF}
+    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+  >
+    Download PDF
+  </button>
+</div>
+
+
+      {/* ---------------- HISTORY TABLE ---------------- */}
+      <div className="bg-white p-6 rounded-lg border">
+        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+          
+          Prediction History 
         </h2>
 
         {loadingHistory ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-orange-600" /></div>
-        ) : history.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
-              <thead>
-                <tr className="border-b dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs uppercase tracking-wider">
-                  <th className="py-3 px-2">Date</th>
-                  <th className="py-3 px-2">Prediction</th>
-                  <th className="py-3 px-2">NDVI</th>
-                  <th className="py-3 px-2">Bright (K)</th>
-                  <th className="py-3 px-2">T31 (K)</th>
-                  <th className="py-3 px-2">Conf %</th>
-                  <th className="py-3 px-2">Temp °C</th>
-                  <th className="py-3 px-2">Hum %</th>
-                  <th className="py-3 px-2">Wind m/s</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y dark:divide-gray-700">
-                {history.slice().reverse().map((item, index) => (
-                  <tr key={item._id || index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition text-sm">
-                    <td className="py-3 px-2 whitespace-nowrap dark:text-gray-300">
-                      {new Date(item.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-2">
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${getFireTypeColor(item.prediction)}`}>
-                        {item.prediction}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2 font-mono dark:text-gray-300">{(item.ndvi || 0).toFixed(4)}</td>
-                    <td className="py-3 px-2 dark:text-gray-300">{item.brightness}</td>
-                    <td className="py-3 px-2 dark:text-gray-300">{item.t31}</td>
-                    <td className="py-3 px-2 dark:text-gray-300">{item.confidence}%</td>
-                    <td className="py-3 px-2 dark:text-gray-300">{item.temperature}</td>
-                    <td className="py-3 px-2 dark:text-gray-300">{item.humidity}</td>
-                    <td className="py-3 px-2 dark:text-gray-300">{item.windSpeed}</td>
+          <Loader2 className="animate-spin mx-auto" />
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="border-b">
+              <tr>
+                <th>Date</th>
+                <th>Prediction</th>
+                <th>NDVI</th>
+                <th>Brightness</th>
+                <th>T31</th>
+                <th>Temp</th>
+                <th>Hum</th>
+                <th>Wind</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history
+                .slice()
+                .reverse()
+                .map((item, i) => (
+                  <tr
+                    key={i}
+                    onClick={() => handleHistoryClick(item)}
+                    className="cursor-pointer hover:bg-gray-100 border-b"
+                  >
+                    <td>{new Date(item.createdAt).toLocaleDateString()}</td>
+                    <td>{item.prediction}</td>
+                    <td>{item.ndvi}</td>
+                    <td>{item.brightness}</td>
+                    <td>{item.t31}</td>
+                    <td>{item.temperature}</td>
+                    <td>{item.humidity}</td>
+                    <td>{item.windSpeed}</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-center text-gray-500 py-10">No historical data available.</p>
+            </tbody>
+          </table>
         )}
       </div>
+
+      {/* ---------------- DETAILS ---------------- */}
+      {selectedHistory && (
+        <div className="bg-white p-6 rounded-lg border space-y-3">
+          <h3 className="text-xl font-bold">Prediction Details</h3>
+           {/* ✅ DATE & TIME */}
+    <p className="text-sm text-gray-500">
+      <b>Date:</b> {formatDateTime(selectedHistory.createdAt)}
+    </p>
+          <p><b>Fire Type:</b> {selectedHistory.prediction}</p>
+          <p><b>NDVI:</b> {selectedHistory.ndvi}</p>
+          <p><b>Brightness:</b> {selectedHistory.brightness}</p>
+          <p><b>Temperature:</b> {selectedHistory.temperature}</p>
+          <p><b>Humidity:</b> {selectedHistory.humidity}</p>
+          <p><b>Wind Speed:</b> {selectedHistory.windSpeed}</p>
+
+          <hr />
+
+          <h4 className="font-semibold">Explanation</h4>
+
+          {loadingAI ? (
+            <p>Generating explanation...</p>
+          ) : (
+            <p className="text-sm whitespace-pre-line">{aiExplanation}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 };
