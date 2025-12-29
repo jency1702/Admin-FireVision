@@ -145,6 +145,8 @@ import { getFireEvents, getMLPredictions } from '../services/api';
 import StatCard from '../components/StatCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import GeminiChatbot from '../components/GeminiChatbot';
+import FireRiskMonitor from '../components/FireRiskMonitor';
+
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
@@ -224,43 +226,10 @@ const Dashboard = () => {
           <StatCard title="CNN Detections" value={counts.cnnFire} icon={Cpu} color="red" />
           <StatCard title="CCTV Detections" value={counts.cctvFire} icon={Video} color="blue" />
         </div>
-
-        {/* GIS Heatmap */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Fire Distribution - GIS Heatmap
-          </h2>
-
-          <div className="w-full h-96 bg-gray-100 rounded-lg relative border overflow-hidden">
-            <svg className="w-full h-full" viewBox="0 0 800 400" preserveAspectRatio="none">
-              <defs>
-                <radialGradient id="mainHeat" cx="35%" cy="40%">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity="0.8" />
-                  <stop offset="60%" stopColor="#f59e0b" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-                </radialGradient>
-              </defs>
-
-              {(counts.cnnFire > 0 || counts.cctvFire > 0) && (
-                <circle cx="400" cy="200" r="130" fill="url(#mainHeat)" />
-              )}
-
-              <circle cx="400" cy="200" r="6" fill="#b91c1c" stroke="white" strokeWidth="2" />
-            </svg>
-
-            <div className="absolute top-4 right-4 bg-white/80 p-3 rounded-md text-xs shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-red-500 rounded-full" />
-                Active Fire Hotspots
-              </div>
-              <div className="text-gray-500 italic">
-                Tracking {counts.cnnFire + counts.cctvFire} live sources
-              </div>
-            </div>
-          </div>
-        </div>
+        <FireRiskMonitor />
+        
       </div>
-
+     
       {/* ✅ Gemini Chatbot Added (No dashboard change) */}
       <GeminiChatbot />
     </>

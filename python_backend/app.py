@@ -237,6 +237,53 @@ def predict_cnn():
 
     return jsonify(res)
 
+# ---------------- CCTV ----------------
+@app.route("/predict/cctv", methods=["POST"])
+def predict_cctv():
+    data = request.get_json()
+    stream_url = data.get("streamUrl")
+
+    if not stream_url:
+        return jsonify({"success": False, "error": "Stream URL required"}), 400
+
+    # 1️⃣ Capture frame from CCTV
+    cap = cv2.VideoCapture(stream_url)
+    ret, frame = cap.read()
+    cap.release()
+
+    if not ret:
+        return jsonify({"success": False, "error": "Unable to read CCTV stream"}), 500
+
+    # 2️⃣ Convert OpenCV → PIL
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(frame_rgb)
+
+    # 3️⃣ CNN preprocessing
+    arr = img.resize((IMG_SIZE, IMG_SIZE))
+    arr = img_to_array(arr) / 255.0
+    arr = np.expand_dims(arr, axis=0)
+
+    # 4️⃣ CNN prediction
+    result = cnn_model.predict(arr)[0][0]
+    fire_prob = 1 - result
+
+    response = {
+        "success": True,
+        "label": "Fire" if result < 0.5 else "No Fire",
+        "fireProbability": float(fire_prob),
+        "source": "CCTV Stream"
+    }
+
+    # 5️⃣ Fire intelligence
+    if result < 0.5:
+        response["dangerScore"] = calculate_fire_risk(img, fire_prob)
+        response["cause"], response["confidence"] = predict_fire_cause(img)
+
+    return jsonify(response)
+
+
+
+
 # ---------------- PDF DOWNLOAD (FIXED) ----------------
 
 @app.route("/download/report", methods=["POST"])
