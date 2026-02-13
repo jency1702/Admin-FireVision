@@ -31,7 +31,7 @@ CORS(app)
 # LOAD CNN MODEL
 # -------------------------------------------------------
 
-print("🔥 Loading CNN model...")
+print("Loading CNN model...")
 cnn_model = load_model("fire_cnn_model.h5")
 IMG_SIZE = 224
 print("✓ CNN model loaded")
